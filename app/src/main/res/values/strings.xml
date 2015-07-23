@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">Music Streamer</string>
+
+    <string name="action_settings">Settings</string>
+    <string name="action_share">Share</string>
+    <string name="action_mediaplayer">Media Player</string>
+    <string name="artist_not_found">No artists with this name were found.\nPlease try again.</string>
+    <string name="no_tracks_found">No tracks found for this artist.\nPlease try again.</string>
+    <string name="country_us">US</string>
+    <string name="problem_detected">"Problem Detected: Type = "</string>
+    <string name="zero_point_zero">0.00</string>
+    <string name="saved_artist_state">state_artist</string>
+    <string name="notification_preference">notification_preference</string>
+    <string name="allow_notification_title">Allow App to send notifications?</string>
+    <string name="allow_notification_summary">Allow media control on the lock screen and Action Bar</string>
+    <string name="music_streamer_notification">Music Streamer Notifications</string>
+    <string name="spotify_country_code_title">Spotify Streamer Country Code</string>
+    <string name="countrycode_preference">countrycode_preference</string>
+    <string name="spotify_country_code_title2">Spotify Country Code</string>
+    <string name="spotify_country_code_summary">Country Code used when requesting the Top Ten list from Spotify</string>
+    <string name="spotify_country_code_dialog_title">Spotify Country Code</string>
+    <string name="alpha_characters">abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ</string>
+    <string name="text_input">text</string>
+</resources>

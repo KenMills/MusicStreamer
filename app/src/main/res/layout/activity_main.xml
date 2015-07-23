@@ -1,0 +1,27 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/fragment_main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <fragment
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:name="com.example.android.musicstreamer.ArtistFragment"
+        android:id="@+id/fragment_artist"
+        />
+
+    <fragment
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:name="com.example.android.musicstreamer.TopTenFragment"
+        android:id="@+id/fragment_topten"
+        />
+
+    <fragment
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:name="com.example.android.musicstreamer.MediaPlayerFragment"
+        android:id="@+id/fragment_mediaplayer"
+        />
+
+</FrameLayout>
