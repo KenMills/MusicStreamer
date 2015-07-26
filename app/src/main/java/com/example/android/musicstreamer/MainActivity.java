@@ -1,5 +1,7 @@
 package com.example.android.musicstreamer;
 
+import android.support.v7.app.ActionBar;
+import android.support.v7.app.AppCompatActivity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -182,6 +184,7 @@ public class MainActivity extends ActionBarActivity
     public void onArtistEntered() {
         TopTenFragment fragment = (TopTenFragment) getSupportFragmentManager().findFragmentById(R.id.fragment_topten);
         fragment.clear();
+        SetSubTitle("");
 
         HideMediaPlayerActionBarIcon();
         HideShareActionBarIcon();
@@ -200,6 +203,7 @@ public class MainActivity extends ActionBarActivity
 
         updateTopTen(bundle);
         mServiceController.StopNotifications();
+        SetSubTitle(artist);
 
         HideMediaPlayerActionBarIcon();
         HideShareActionBarIcon();
@@ -346,6 +350,7 @@ public class MainActivity extends ActionBarActivity
     }
 
     public void onPlayStateChanged(int playState) {
+        Log.v(LOG_TAG, "onPlayStateChanged playState = " +playState);
         // need to send the playState to the mediaFragment
         MediaPlayerFragment fragment = getCurrentMediaPlayerFragment();
         if (fragment != null) {
@@ -367,8 +372,7 @@ public class MainActivity extends ActionBarActivity
     public void onBackPressed() {
         Log.v(LOG_TAG, "onBackPressed");
 
-        int screenOrientation = getResources().getConfiguration().orientation;
-        if (screenOrientation == Configuration.ORIENTATION_PORTRAIT) {
+        if (!isDualPane()) {
 
             if (findViewById(R.id.fragment_topten).getVisibility() == View.VISIBLE) {
                 showView(R.id.fragment_artist);
@@ -621,4 +625,9 @@ public class MainActivity extends ActionBarActivity
         }
     }
 
+    private void SetSubTitle(String subTitle) {
+//        ActionBar ab = getActionBar();
+        ActionBar ab = getSupportActionBar();
+        ab.setSubtitle(subTitle);
+    }
 }
