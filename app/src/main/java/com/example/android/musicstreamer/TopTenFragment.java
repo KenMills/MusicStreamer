@@ -3,7 +3,6 @@ package com.example.android.musicstreamer;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Message;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -214,28 +213,6 @@ public class TopTenFragment extends Fragment implements TopTenTracksAdapter.TopT
             Log.v(LOG_TAG, "UpdateVars no bundle with saved data");
             mTopTenAdapter.restore(savedInstanceState);
         }
-    }
-
-    public void previousTrack() {
-        int max = mTopTenListView.getCount();
-        if (--mCurrentPosition < 0)
-            mCurrentPosition = max-1;
-
-        updateTrack();
-    }
-
-    public void nextTrack() {
-        int max = mTopTenListView.getCount();
-        if (++mCurrentPosition >= max)
-            mCurrentPosition = 0;
-
-        updateTrack();
-    }
-
-    private void updateTrack() {
-        TopTenTracks topTen = (TopTenTracks) mTopTenListView.getItemAtPosition(mCurrentPosition);
-        Bundle bundle = CreateMediaBundle(mCurrentPosition, topTen);
-        listener.onTopTenItemSelected(bundle);
     }
 
     public void onTopTenItemsReady(Bundle[] bundles) {

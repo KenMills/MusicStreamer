@@ -1,15 +1,9 @@
 package com.example.android.musicstreamer;
 
 import android.support.v7.app.ActionBar;
-import android.support.v7.app.AppCompatActivity;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.os.Message;
-import android.preference.Preference;
 import android.preference.PreferenceManager;
 import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.ActionBarActivity;
@@ -170,7 +164,6 @@ public class MainActivity extends ActionBarActivity
         super.onResume();
         Log.v(LOG_TAG, "onResume");
         ReadPreferences();
-//kmm        mServiceController.RequestCurrentTrack();
 
         if (isDualPane()) {
             showPane(mCurrentScreenState, null);
@@ -299,22 +292,6 @@ public class MainActivity extends ActionBarActivity
             if (bundle != null) {
                 fragment.update(bundle);
             }
-
-/*
-            if (isActionButtonPressed) {
-                Log.d(LOG_TAG, "onMediaStarted isActionButtonPressed");
-
-                fragment.onActionButtonPressed();
-                isActionButtonPressed = false;
-            }
-            else {
-                // need to get the lastest from the service...
-                Bundle bundle = mServiceController.GetCurrentMediaBundle();
-                if (bundle != null) {
-                    fragment.update(bundle);
-                }
-            }
-*/
         }
 
         HideMediaPlayerActionBarIcon();
@@ -340,7 +317,6 @@ public class MainActivity extends ActionBarActivity
     }
 
     public void onServiceRunning(Bundle bundle) {
-//        updateMediaPlayer(bundle);
     }
 
     public void onTrackUpdated(Bundle bundle) {
@@ -626,7 +602,6 @@ public class MainActivity extends ActionBarActivity
     }
 
     private void SetSubTitle(String subTitle) {
-//        ActionBar ab = getActionBar();
         ActionBar ab = getSupportActionBar();
         ab.setSubtitle(subTitle);
     }
