@@ -3,6 +3,7 @@ package com.example.android.musicstreamer;
 import android.app.Activity;
 import android.app.Dialog;
 import android.app.DialogFragment;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -51,9 +52,6 @@ public class MediaPlayerFragment extends DialogFragment {
 
     private int playerState = PLAY_STATE_IDLE;
 
-    private boolean isServiceRunning = false;
-    private boolean playOnServiceStart = false;
-
     // used for bundling tracks
     public static final String POSITION = "POSITION";
     public static final String ID = "ID";
@@ -63,17 +61,6 @@ public class MediaPlayerFragment extends DialogFragment {
     public static final String PREVIEW = "PREVIEW";
     public static final String IMAGE = "IMAGE";
 
-    public static Handler mediaPlayerMsgHandler;
-    public static final int MSG_PLAY_COMPLETE           = 0x0001;
-    public static final int MSG_MEDIA_PREPARED          = 0x0002;
-    public static final int MSG_MEDIA_PLAY              = 0x0003;
-    public static final int MSG_MEDIA_PAUSE             = 0x0003;
-    public static final int MSG_MEDIA_SET_POS           = 0x0004;
-    public static final int MSG_MEDIA_GET_POS           = 0x0005;
-    public static final int MSG_MEDIA_GET_MAX           = 0x0006;
-    public static final int MSG_MEDIA_SERVICE_STARTED   = 0x0007;
-    public static final int MSG_MEDIA_SERVICE_RUNNING   = 0x0008;
-    public static final int MSG_PLAY_STARTED            = 0x0009;
 
     private static final String MEDIA_PREF = "MEDIA PREF";
     private static final String MEDIA_IS_PLAYING = "IS_PLAYING";
@@ -82,10 +69,7 @@ public class MediaPlayerFragment extends DialogFragment {
 
     private int mCurrentMediaPosition = 0;
     private int mMaxMediaDuration = 0;
-
-    private boolean isActionBtnPressed = false;
-    private boolean isRestoreNeeded = true;
-    private boolean isUpdated = false;
+    private boolean viewsSetup = false;
 
     private OnTrackUpdateListener listener;
 
@@ -96,9 +80,11 @@ public class MediaPlayerFragment extends DialogFragment {
     public interface OnTrackUpdateListener {
         public void onMediaStarted();
         public void onMediaPaused();
-        public void onServiceStarted();
+        public void onMediaDismiss();
         public void onDecrementTrack();
         public void onIncrementTrack();
+        public void onPauseTrack();
+        public void onResumeTrack();
     }
 
     @Override
@@ -125,22 +111,24 @@ public class MediaPlayerFragment extends DialogFragment {
     }
 
     @Override
+    public void onDismiss(DialogInterface dialog) {
+        Log.v(LOG_TAG, "onDismiss");
+
+        if (listener != null) {
+            listener.onMediaDismiss();
+        }
+
+        super.onDismiss(dialog);
+    }
+
+    @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         rootView = inflater.inflate(R.layout.mediaplayer_fragment, container, false);
 
         Log.v(LOG_TAG, "onCreateView");
 
-        setupMessageHandler();
         setupViews();
-
-        // start the media player service and pass the preview url
-        Intent serviceIntent = new Intent(getActivity(), MediaService.class);
-        Bundle bundle = new Bundle();
-        bundle.putString(PREVIEW, previewUrl);
-        bundle.putInt(POSITION, position);
-        serviceIntent.putExtras(bundle);
-        getActivity().startService(serviceIntent);
 
         if (savedInstanceState != null) {
             RestorePreferences();
@@ -152,7 +140,6 @@ public class MediaPlayerFragment extends DialogFragment {
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         Log.v(LOG_TAG, "onCreateDialog");
-        playOnServiceStart = true;
         return super.onCreateDialog(savedInstanceState);
     }
 
@@ -170,6 +157,7 @@ public class MediaPlayerFragment extends DialogFragment {
         mPlayPause.setOnClickListener(playPauseButtonListener);
 
         mImageView = (ImageView) rootView.findViewById(R.id.media_player_imageView);
+        viewsSetup = true;
     }
 
     private Button.OnClickListener previousButtonListener = new Button.OnClickListener() {
@@ -220,113 +208,6 @@ public class MediaPlayerFragment extends DialogFragment {
                 }
             };
 
-    private void setupMessageHandler() {
-        // setup the message handler used by the MediaPlayerActivity, MediaService, and MediaController
-        mediaPlayerMsgHandler = new Handler(new Handler.Callback() {
-            @Override
-            public boolean handleMessage(Message msg) {
-//                Log.d(LOG_TAG, "mediaPlayerMsgHandler");
-
-                switch (msg.what) {
-                    case MSG_MEDIA_SERVICE_STARTED: {
-                        Log.v(LOG_TAG, "mediaPlayerMsgHandler  MSG_MEDIA_SERVICE_STARTED");
-
-                        isServiceRunning = true;
-                        if (playOnServiceStart) {
-                            setPlayerState(PLAY_STATE_PLAYING);
-                            SendUrlToService();
-                            MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_RESET);
-                        }
-
-                        listener.onServiceStarted();
-                        break;
-                    }
-
-                    case MSG_MEDIA_SERVICE_RUNNING: {
-                        Log.v(LOG_TAG, "mediaPlayerMsgHandler  MSG_MEDIA_SERVICE_RUNNING");
-                        Log.v(LOG_TAG, "mediaPlayerMsgHandler  isActionBtnPressed = " + isActionBtnPressed);
-
-                        if (isRestoreNeeded) {
-                            RestorePreferences();
-                        }
-
-
-                        // need to get the latest bundle from the service and use that as the current playing...
-                        if (!isUpdated) {
-                            update(msg.getData());
-                        }
-
-                        Log.v(LOG_TAG, "MSG_MEDIA_SERVICE_RUNNING position = " +position);
-
-                        isServiceRunning = true;
-
-                        if (playOnServiceStart && (playerState == PLAY_STATE_IDLE)) {
-                            setPlayerState(PLAY_STATE_PLAYING);
-                            SendUrlToService();
-                            MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_RESET);
-                        }
-                        break;
-                    }
-
-                    case MSG_MEDIA_PLAY: {
-                        Bundle msgBundle = msg.getData();
-
-                        position = msgBundle.getInt(POSITION);
-                        id = msgBundle.getString(ID);
-                        albumName = msgBundle.getString(ALBUM);
-                        trackName = msgBundle.getString(TRACK);
-                        previewUrl = msgBundle.getString(PREVIEW);
-                        imageUrl = msgBundle.getString(IMAGE);
-
-                        // update imageView
-                        SetImage();
-
-                        // update media player
-                        SendUrlToService();
-                        MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_RESET);
-                        break;
-                    }
-                    case MSG_PLAY_STARTED: {
-                        Log.v(LOG_TAG, "mediaPlayerMsgHandler  MSG_PLAY_STARTED");
-                        MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_GET_POS);
-
-                        setPlayerState(PLAY_STATE_PLAYING);
-                        UpdatePlayPauseButton();
-                        break;
-                    }
-                    case MSG_PLAY_COMPLETE: {
-                        Log.v(LOG_TAG, "mediaPlayerMsgHandler  MSG_PLAY_COMPLETE");
-
-                        mCurrentMediaPosition = mMaxMediaDuration;
-
-                        UpdatePlayPauseButton();
-                        UpdateSeekBar();
-                        setPlayerState(PLAY_STATE_IDLE);
-                        break;
-                    }
-                    case MSG_MEDIA_GET_POS: {
-                        mCurrentMediaPosition = msg.arg1;
-                        mMaxMediaDuration = msg.arg2;
-
-                        Log.v(LOG_TAG, "mediaPlayerMsgHandler  MSG_MEDIA_GET_POS mCurrentMediaPosition = " + mCurrentMediaPosition);
-
-                        UpdatePlayPauseButton();
-                        UpdateSeekBar();
-                        break;
-                    }
-                    case MSG_MEDIA_GET_MAX: {
-                        Log.v(LOG_TAG, "mediaPlayerMsgHandler  MSG_MEDIA_GET_MAX");
-                        mMaxMediaDuration = msg.arg1;
-                        UpdateSeekBar();
-                        break;
-                    }
-                }
-
-                return true;
-            }
-        });
-
-    }
 
     public void update(Bundle bundle) {
         Log.v(LOG_TAG, "update");
@@ -342,19 +223,10 @@ public class MediaPlayerFragment extends DialogFragment {
             SetImage();
             UpdatePlayPauseButton();
             UpdateSeekBar();
-            isRestoreNeeded = false;
-            isUpdated = true;
-
-            if (isServiceRunning) {
-                Log.v(LOG_TAG, "update isServiceRunning = " +isServiceRunning);
-                setPlayerState(PLAY_STATE_PLAYING);
-                SendUrlToService();
-                MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_RESET);
-            }
         }
     }
 
-    private void RestorePreferences() {
+    public void RestorePreferences() {
         Log.v(LOG_TAG, "RestorePreferences");
 
         SharedPreferences pref = getActivity().getSharedPreferences(MEDIA_PREF, getActivity().MODE_PRIVATE);
@@ -453,7 +325,6 @@ public class MediaPlayerFragment extends DialogFragment {
     public void onStart() {
         Log.v(LOG_TAG, "onStart");
 
-        isUpdated = false;
         listener.onMediaStarted();
 
         super.onStart();
@@ -472,23 +343,23 @@ public class MediaPlayerFragment extends DialogFragment {
     public void onResume() {
         Log.v(LOG_TAG, "onResume");
 
+        RestorePreferences();
+
         super.onResume();
     }
 
-    private void SendUrlToService() {
-        Message newMessage = new Message();
-        Bundle bundle = new Bundle();
-        bundle.putString(MediaService.PREVIEW, previewUrl);
-        bundle.putInt(POSITION, position);
-        newMessage.what = MediaService.MSG_MEDIA_SET_URL;
-        newMessage.setData(bundle);
-        MediaService.mediaServiceMsgHandler.sendMessage(newMessage);
+    @Override
+    public void onStop() {
+        viewsSetup = false;
+        super.onStop();
     }
 
     public void onRev() {
         Log.v(LOG_TAG, "onRev");
 
-        MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_PAUSE);
+        mMaxMediaDuration = 0;
+        mCurrentMediaPosition = 0;
+
         listener.onDecrementTrack();
     }
 
@@ -496,33 +367,41 @@ public class MediaPlayerFragment extends DialogFragment {
 
         if (playerState == PLAY_STATE_PLAYING) {
             Log.v(LOG_TAG, "onPlayPause PAUSING PLAYBACK");
-            setPlayerState(PLAY_STATE_PAUSED);
-            MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_PAUSE);
+            listener.onPauseTrack();
         }
         else if (playerState == PLAY_STATE_PAUSED) {
             Log.v(LOG_TAG, "onPlayPause RESUMING PLAYBACK");
-            setPlayerState(PLAY_STATE_PLAYING);
-            MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_RESUME);
+            listener.onResumeTrack();
         }
 
         UpdatePlayPauseButton();
-        MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_GET_POS);
     }
 
     public void onFwd() {
         Log.v(LOG_TAG, "onFwd");
 
-        MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_MEDIA_PAUSE);
+        mMaxMediaDuration = 0;
+        mCurrentMediaPosition = 0;
+
         listener.onIncrementTrack();
     }
 
     public void onActionButtonPressed() {
         Log.v(LOG_TAG, "onActionButtonPressed");
-        isActionBtnPressed = true;
     }
 
-    private void setPlayerState(int playState) {
+    public void updatePlayState(int playState) {
+        Log.d(LOG_TAG, "updatePlayState");
         playerState = playState;
+        UpdatePlayPauseButton();
     }
 
+    public void updateProgress(int current, int max) {
+        mCurrentMediaPosition = current;
+        mMaxMediaDuration = max;
+
+        if (viewsSetup) {
+            UpdateSeekBar();
+        }
+    }
 }

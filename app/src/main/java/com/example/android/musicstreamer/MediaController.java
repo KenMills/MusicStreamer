@@ -13,9 +13,9 @@ import java.io.IOException;
  * Created by kenm on 6/29/2015.
  */
 public class MediaController {
-    private final int PLAY_STATE_IDLE    = 0;
-    private final int PLAY_STATE_PLAYING = 1;
-    private final int PLAY_STATE_PAUSED  = 2;
+    public static final int PLAY_STATE_IDLE    = 0;
+    public static final int PLAY_STATE_PLAYING = 1;
+    public static final int PLAY_STATE_PAUSED  = 2;
 
     private int playState = PLAY_STATE_IDLE;
 
@@ -105,7 +105,7 @@ public class MediaController {
             mMediaPlayer.start();
             checkPlayProgress();
 
-            MediaPlayerFragment.mediaPlayerMsgHandler.sendEmptyMessage(MediaPlayerFragment.MSG_PLAY_STARTED);
+            ServiceController.serviceControllerMsgHandler.sendEmptyMessage(ServiceController.MSG_PLAY_STARTED);
         }
     }
 
@@ -123,17 +123,19 @@ public class MediaController {
 
     private void sendMax() {
         Message newMsg = new Message();
-        newMsg.what = MediaPlayerFragment.MSG_MEDIA_GET_MAX;
+        newMsg.what = ServiceController.MSG_MEDIA_GET_MAX;
         newMsg.arg1 = mMediaPlayer.getDuration();
-        MediaPlayerFragment.mediaPlayerMsgHandler.sendMessage(newMsg);
+        ServiceController.serviceControllerMsgHandler.sendMessage(newMsg);
     }
 
     private void sendPosition() {
-        Message newMsg = new Message();
-        newMsg.what = MediaPlayerFragment.MSG_MEDIA_GET_POS;
-        newMsg.arg1 = mMediaPlayer.getCurrentPosition();
-        newMsg.arg2 = mMediaPlayer.getDuration();
-        MediaPlayerFragment.mediaPlayerMsgHandler.sendMessage(newMsg);
+        if (ServiceController.serviceControllerMsgHandler != null) {
+            Message newMsg = new Message();
+            newMsg.what = ServiceController.MSG_MEDIA_GET_POS;
+            newMsg.arg1 = mMediaPlayer.getCurrentPosition();
+            newMsg.arg2 = mMediaPlayer.getDuration();
+            ServiceController.serviceControllerMsgHandler.sendMessage(newMsg);
+        }
     }
 
     private void checkPlayProgress() {

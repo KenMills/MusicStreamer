@@ -33,9 +33,16 @@ public class MediaService extends Service {
     public static final int MSG_MEDIA_PREPPED       = 0x0018;
     public static final int MSG_MEDIA_RESUME        = 0x0019;
     public static final int MSG_PLAY_COMPLETE       = 0x001a;
+    public static final int MSG_INC_TRACK           = 0x001c;
+    public static final int MSG_DEC_TRACK           = 0x001d;
+
     public static final int MSG_MEDIA_RESET         = 0x0020;
+    public static final int MSG_START_NOTIFY        = 0x0021;
+    public static final int MSG_STOP_NOTIFY         = 0x0022;
+
     public static final int MSG_MEDIA_BUNDLE        = 0x0030;
     public static final int MSG_READ_PREF           = 0x0031;
+    public static final int MSG_GET_CURR_TRACK      = 0x0032;
 
     private static final String BROADCAST_ACTION_PLAY    = "Play";
     private static final String BROADCAST_ACTION_PAUSE   = "Pause";
@@ -44,6 +51,7 @@ public class MediaService extends Service {
 
     private static final boolean DEFAULT_NOTIFICATION_SETTING = false;
     private boolean mAllowNotifications = DEFAULT_NOTIFICATION_SETTING;
+    private boolean mNotificationsStarted = false;
 
     public static final String PREVIEW = "PREVIEW";
     public static final String POSITION = "POSITION";
@@ -81,6 +89,7 @@ public class MediaService extends Service {
                     case MSG_MEDIA_PREPPED: {
                         Log.d(SERVICE_TAG, "mediaServiceMsgHandler  MSG_MEDIA_PLAY");
                         mMediaController.play();
+                        mNotificationsStarted = true;
                         UpdateNotification();
                         break;
                     }
@@ -91,16 +100,29 @@ public class MediaService extends Service {
                         break;
                     }
                     case MSG_MEDIA_PLAY: {
-                        Log.d(SERVICE_TAG, "mediaServiceMsgHandler  MSG_MEDIA_PLAY");
+                        Log.d(SERVICE_TAG, "mediaServiceMsgHandler  MSG_MEDIA_PLAY position = " +msg.arg1);
 
-                        mMediaController.Prep();
+                        if (mMediaController.getPlayState() == mMediaController.PLAY_STATE_PLAYING) {
+                            mMediaController.pause();
+                        }
 
-                        UpdateNotification();
+                        mNotificationsStarted = true;
+                        mCurrentTrack = msg.arg1;
+
+                        if (mBundles[mCurrentTrack] != null) {
+                            String url = mBundles[mCurrentTrack].getString(TRACK_BUNDLE_PREVIEW);
+                            mMediaController.setUrl(url);
+                            mMediaController.reset();
+
+                            UpdateNotification();
+                            sendTrackInfo();
+                        }
                         break;
                     }
                     case MSG_PLAY_COMPLETE: {
+                        Log.d(SERVICE_TAG, "mediaServiceMsgHandler  MSG_PLAY_COMPLETE");
                         UpdateNotification();
-                        MediaPlayerFragment.mediaPlayerMsgHandler.sendEmptyMessage(MediaPlayerFragment.MSG_PLAY_COMPLETE);
+                        ServiceController.serviceControllerMsgHandler.sendEmptyMessage(ServiceController.MSG_PLAY_COMPLETE);
                         break;
                     }
                     case MSG_MEDIA_RESET: {
@@ -136,11 +158,11 @@ public class MediaService extends Service {
                         Log.d(SERVICE_TAG, "mediaServiceMsgHandler  MSG_MEDIA_GET_POS");
 
                         Message newMsg = new Message();
-                        newMsg.what = MediaPlayerFragment.MSG_MEDIA_GET_POS;
+                        newMsg.what = ServiceController.MSG_MEDIA_GET_POS;
                         newMsg.arg1 = mMediaController.getCurentPosition();
                         newMsg.arg2 = mMediaController.getDuration();
-                        if (MediaPlayerFragment.mediaPlayerMsgHandler != null) {
-                            MediaPlayerFragment.mediaPlayerMsgHandler.sendMessage(newMsg);
+                        if (ServiceController.serviceControllerMsgHandler != null) {
+                            ServiceController.serviceControllerMsgHandler.sendMessage(newMsg);
                         }
                     }
 
@@ -150,10 +172,10 @@ public class MediaService extends Service {
                         int max = mMediaController.getDuration();
 
                         Message newMsg = new Message();
-                        newMsg.what = MediaPlayerFragment.MSG_MEDIA_GET_MAX;
+                        newMsg.what = ServiceController.MSG_MEDIA_GET_MAX;
                         newMsg.arg1 = max;
-                        if (MediaPlayerFragment.mediaPlayerMsgHandler != null) {
-                            MediaPlayerFragment.mediaPlayerMsgHandler.sendMessage(newMsg);
+                        if (ServiceController.serviceControllerMsgHandler != null) {
+                            ServiceController.serviceControllerMsgHandler.sendMessage(newMsg);
                         }
                     }
                     break;
@@ -166,6 +188,30 @@ public class MediaService extends Service {
                         ReadPreferences();
                     }
                     break;
+                    case MSG_INC_TRACK: {
+                        Log.d(SERVICE_TAG, "mediaServiceMsgHandler  MSG_INC_TRACK");
+                        onIncrementTrack();
+                        break;
+                    }
+                    case MSG_DEC_TRACK: {
+                        Log.d(SERVICE_TAG, "mediaServiceMsgHandler  MSG_DEC_TRACK");
+                        onDecrementTrack();
+                        break;
+                    }
+                    case MSG_GET_CURR_TRACK: {
+                        Log.d(SERVICE_TAG, "mediaServiceMsgHandler  MSG_GET_CURR_TRACK");
+                        sendTrackInfo();
+                        break;
+                    }
+                    case MSG_START_NOTIFY: {
+                        mNotificationsStarted = true;
+                        break;
+                    }
+                    case MSG_STOP_NOTIFY: {
+                        ClearNotification();
+                        mNotificationsStarted = false;
+                        break;
+                    }
                 }
 
                 return true;
@@ -199,16 +245,16 @@ public class MediaService extends Service {
         Log.v(SERVICE_TAG, "onStartCommand first time = " + !serviceStarted);
 
         if (serviceStarted) {
-            if (MediaPlayerFragment.mediaPlayerMsgHandler != null) {
+            if (ServiceController.serviceControllerMsgHandler != null) {
                 Message newMsg = new Message();
-                newMsg.what = MediaPlayerFragment.MSG_MEDIA_SERVICE_RUNNING;
+                newMsg.what = ServiceController.MSG_MEDIA_SERVICE_RUNNING;
                 newMsg.setData(mBundles[mCurrentTrack]);
 
-                MediaPlayerFragment.mediaPlayerMsgHandler.sendMessage(newMsg);
+                ServiceController.serviceControllerMsgHandler.sendMessage(newMsg);
             }
         }
         else {
-            SendMediaPlayerFragmentMessage(MediaPlayerFragment.MSG_MEDIA_SERVICE_STARTED);
+            SendMediaPlayerFragmentMessage(ServiceController.MSG_MEDIA_SERVICE_STARTED);
             serviceStarted = true;
         }
 
@@ -221,6 +267,7 @@ public class MediaService extends Service {
         Log.v(SERVICE_TAG, "onDestroy");
 
         this.unregisterReceiver(this.receiver);
+        ClearNotification();
 
         super.onDestroy();
     }
@@ -232,8 +279,8 @@ public class MediaService extends Service {
     }
 
     private void SendMediaPlayerFragmentMessage(int msg) {
-        if (MediaPlayerFragment.mediaPlayerMsgHandler != null) {
-            MediaPlayerFragment.mediaPlayerMsgHandler.sendEmptyMessage(msg);
+        if (ServiceController.serviceControllerMsgHandler != null) {
+            ServiceController.serviceControllerMsgHandler.sendEmptyMessage(msg);
         }
     }
 
@@ -275,6 +322,7 @@ public class MediaService extends Service {
         String url = mBundles[mCurrentTrack].getString(TRACK_BUNDLE_PREVIEW);
         mMediaController.setUrl(url);
         mMediaController.reset();
+        sendTrackInfo();
     }
 
     private void onDecrementTrack() {
@@ -286,6 +334,7 @@ public class MediaService extends Service {
         String url = mBundles[mCurrentTrack].getString(TRACK_BUNDLE_PREVIEW);
         mMediaController.setUrl(url);
         mMediaController.reset();
+        sendTrackInfo();
     }
 
     private void setupReceiver() {
@@ -299,20 +348,24 @@ public class MediaService extends Service {
     }
 
     private void UpdateNotification() {
-        Log.d(SERVICE_TAG, "UpdateNotification mCurrentTrack = " +mCurrentTrack);
+        Log.d(SERVICE_TAG, "UpdateNotification mCurrentTrack = " + mCurrentTrack);
 
-        if (mAllowNotifications) {
-            if ((mCurrentTrack < MAX_TRACKS) && (mBundles[mCurrentTrack] != null)) {
-                if (mediaNotification ==  null) {
-                    mediaNotification = new MediaNotification(this);
+        if (mNotificationsStarted) {
+            if (mAllowNotifications) {
+                if ((mCurrentTrack < MAX_TRACKS) && (mBundles[mCurrentTrack] != null)) {
+                    if (mediaNotification ==  null) {
+                        mediaNotification = new MediaNotification(this);
+                    }
+
+                    mediaNotification.ShowNotification(mMediaController.getPlayState(), mBundles[mCurrentTrack]);
                 }
-
-                mediaNotification.ShowNotification(mMediaController.getPlayState(), mBundles[mCurrentTrack]);
+            }
+            else {
+                ClearNotification();
             }
         }
-        else {
-            ClearNotification();
-        }
+
+        sendShortMsg(ServiceController.MSG_PLAY_STATE, mMediaController.getPlayState());
     }
 
     private void ClearNotification() {
@@ -330,5 +383,25 @@ public class MediaService extends Service {
         Log.d(SERVICE_TAG, "ReadPreferences notificationCheck = " +mAllowNotifications);
 
         UpdateNotification();
+    }
+
+    private void sendTrackInfo() {
+        Message newMessage = new Message();
+        newMessage.what = ServiceController.MSG_TRACK_INFO;
+        newMessage.setData(mBundles[mCurrentTrack]);
+
+        if (ServiceController.serviceControllerMsgHandler != null) {
+            ServiceController.serviceControllerMsgHandler.sendMessage(newMessage);
+        }
+    }
+
+    private void sendShortMsg(int msgID, int value) {
+        Message newMessage = new Message();
+        newMessage.what = msgID;
+        newMessage.arg1 = value;
+
+        if (ServiceController.serviceControllerMsgHandler != null) {
+            ServiceController.serviceControllerMsgHandler.sendMessage(newMessage);
+        }
     }
 }

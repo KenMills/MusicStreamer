@@ -22,7 +22,8 @@ import android.view.View;
 public class MainActivity extends ActionBarActivity
         implements ArtistFragment.OnItemSelectedListener,
                    TopTenFragment.OnItemSelectedListener,
-                   MediaPlayerFragment.OnTrackUpdateListener {
+                   MediaPlayerFragment.OnTrackUpdateListener,
+                   ServiceController.OnServiceListener{
 
     private static final String LOG_TAG = "MainActivity";
     private static final String MEDIAPLAYER_FRAGMENT = "MediaPlayerFragment";
@@ -31,27 +32,24 @@ public class MainActivity extends ActionBarActivity
     private static final String ARTIST_FRAGMENT_ID       = "ID";
     private static final String ARTIST_FRAGMENT_ARTIST   = "ARTIST";
 
-    private static final String BROADCAST_ACTION_PLAY    = "Play";
-    private static final String BROADCAST_ACTION_PAUSE   = "Pause";
-    private static final String BROADCAST_ACTION_PREV    = "Previous";
-    private static final String BROADCAST_ACTION_NEXT    = "Next";
+    // used for bundling tracks
+    public static final String POSITION = "POSITION";
 
     private static final String DEFAULT_COUNTRY_CODE     = "US";
-    private static final boolean DEFAULT_NOTIFICATION_SETTING = true;
 
     private final String COUNTRY_CODE         = "COUNTRY_CODE";
     private final String SAVED_SCREEN_STATE = "SavedScreenState";
     private final String SAVED_MEDIA_STATE = "SavedMediaState";
     private int mCurrentScreenState;
-    private Bundle mMediaBundle;
+
     private Bundle[] mCurrentTracks = null;
 
-    private boolean isActionButtonPressed = false;
     private boolean hasMediaPlayerBeenShown = false;
     private Menu mMenu;
 
     private ShareActionProvider mShareActionProvider;
     private String mCountryCode = DEFAULT_COUNTRY_CODE;
+    private ServiceController mServiceController;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,6 +58,10 @@ public class MainActivity extends ActionBarActivity
 
         Log.v(LOG_TAG, "onCreate");
         ReadPreferences();      // used to read system preferences (notification/country code...
+
+        mServiceController = new ServiceController(this);
+        mServiceController.setupService();
+        mServiceController.RequestCurrentTrack();
 
         if (isDualPane()) {
             showPane(R.id.fragment_artist, null);
@@ -109,8 +111,6 @@ public class MainActivity extends ActionBarActivity
             case R.id.action_mediaplayer: {
                 Log.v(LOG_TAG, "onOptionsItemSelected action_mediaplayer selected");
 
-                isActionButtonPressed = true;
-
                 if (isDualPane()) {
                     showPane(R.id.fragment_mediaplayer, null);
                 }
@@ -151,6 +151,12 @@ public class MainActivity extends ActionBarActivity
     }
 
     @Override
+    protected void onStop() {
+        Log.v(LOG_TAG, "onStop");
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
         Log.v(LOG_TAG, "onDestroy");
 
@@ -162,6 +168,7 @@ public class MainActivity extends ActionBarActivity
         super.onResume();
         Log.v(LOG_TAG, "onResume");
         ReadPreferences();
+//kmm        mServiceController.RequestCurrentTrack();
 
         if (isDualPane()) {
             showPane(mCurrentScreenState, null);
@@ -192,6 +199,7 @@ public class MainActivity extends ActionBarActivity
         Log.d(LOG_TAG, "onArtistItemSelected artist = " + artist);
 
         updateTopTen(bundle);
+        mServiceController.StopNotifications();
 
         HideMediaPlayerActionBarIcon();
         HideShareActionBarIcon();
@@ -202,8 +210,11 @@ public class MainActivity extends ActionBarActivity
     public void onTopTenItemSelected(Bundle bundle) {
         Log.v(LOG_TAG, "onTopTenItemSelected");
 
+        int currentTrack = bundle.getInt(POSITION);
+        playTrack(currentTrack);
         updateMediaPlayer(bundle);
 
+        mServiceController.StopNotifications();
         hasMediaPlayerBeenShown = true;
         HideMediaPlayerActionBarIcon();
     }
@@ -243,39 +254,63 @@ public class MainActivity extends ActionBarActivity
             showPane(R.id.fragment_mediaplayer, bundle);
         }
 
-        mMediaBundle = bundle;
         ShowShareActionBarIcon();
         UpdateNotification();
+    }
+
+    private void playTrack(int position) {
+        mServiceController.PlayTrack(position);
     }
 
     public void onDecrementTrack() {
         Log.d(LOG_TAG, "onDecrementTrack");
 
-        TopTenFragment fragment = (TopTenFragment) getSupportFragmentManager().findFragmentById(R.id.fragment_topten);
-        fragment.previousTrack();
+        // tell service to decrement track
+        mServiceController.DecrementTrack();
     }
 
     public void onIncrementTrack() {
         Log.d(LOG_TAG, "onIncrementTrack");
 
-        TopTenFragment fragment = (TopTenFragment) getSupportFragmentManager().findFragmentById(R.id.fragment_topten);
-        fragment.nextTrack();
+        // tell service to increment track
+        mServiceController.IncrementTrack();
+    }
+
+    public void onPauseTrack() {
+        // send pause to service
+        mServiceController.PauseTrack();
+    }
+
+    public void onResumeTrack() {
+        // send resume to service
+        mServiceController.ResumeTrack();
     }
 
     public void onMediaStarted() {
         Log.d(LOG_TAG, "onMediaStarted");
 
-        MediaPlayerFragment fragment = (MediaPlayerFragment)getFragmentManager().findFragmentByTag(MEDIAPLAYER_FRAGMENT);
+        MediaPlayerFragment fragment = getCurrentMediaPlayerFragment();
         if (fragment != null) {
+            Bundle bundle = mServiceController.GetCurrentMediaBundle();
+            if (bundle != null) {
+                fragment.update(bundle);
+            }
+
+/*
             if (isActionButtonPressed) {
                 Log.d(LOG_TAG, "onMediaStarted isActionButtonPressed");
 
                 fragment.onActionButtonPressed();
                 isActionButtonPressed = false;
             }
-            else if ((mMediaBundle != null)) {
-                fragment.update(mMediaBundle);
+            else {
+                // need to get the lastest from the service...
+                Bundle bundle = mServiceController.GetCurrentMediaBundle();
+                if (bundle != null) {
+                    fragment.update(bundle);
+                }
             }
+*/
         }
 
         HideMediaPlayerActionBarIcon();
@@ -286,15 +321,46 @@ public class MainActivity extends ActionBarActivity
             DismissDialog();
         }
 
-        mCurrentScreenState = R.id.fragment_topten;
-
         ShowMediaPlayerActionBarIcon();
     }
 
+    public void onMediaDismiss() {
+        mCurrentScreenState = R.id.fragment_topten;
+    }
+
+    //***** MEDIA PLAYER INTERFACE
+
+    //***** MEDIA SERVICE INTERFACE
     public void onServiceStarted() {
         SendTracks();
     }
-    //***** MEDIA PLAYER INTERFACE
+
+    public void onServiceRunning(Bundle bundle) {
+//        updateMediaPlayer(bundle);
+    }
+
+    public void onTrackUpdated(Bundle bundle) {
+        if (mCurrentScreenState == R.id.fragment_mediaplayer) {
+            updateMediaPlayer(bundle);
+        }
+    }
+
+    public void onPlayStateChanged(int playState) {
+        // need to send the playState to the mediaFragment
+        MediaPlayerFragment fragment = getCurrentMediaPlayerFragment();
+        if (fragment != null) {
+            fragment.updatePlayState(playState);
+        }
+    }
+
+    public void onProgressChanged(int current, int max) {
+        // need to send the playState to the mediaFragment
+        MediaPlayerFragment fragment = getCurrentMediaPlayerFragment();
+        if (fragment != null) {
+            fragment.updateProgress(current, max);
+        }
+    }
+    //***** MEDIA SERVICE INTERFACE
 
     //***** View Management
     @Override
@@ -349,6 +415,15 @@ public class MainActivity extends ActionBarActivity
                 findViewById(R.id.fragment_artist).setVisibility(View.GONE);
                 findViewById(R.id.fragment_topten).setVisibility(View.GONE);
                 findViewById(R.id.fragment_mediaplayer).setVisibility(View.VISIBLE);
+
+                MediaPlayerFragment fragment = getCurrentMediaPlayerFragment();
+                if (fragment != null) {
+                    Bundle bundle = mServiceController.GetCurrentMediaBundle();
+                    if (bundle != null) {
+                        fragment.update(bundle);
+                    }
+                }
+
                 break;
             }
         }
@@ -388,7 +463,11 @@ public class MainActivity extends ActionBarActivity
                     fragment.show(getFragmentManager(), MEDIAPLAYER_FRAGMENT);
                 }
 
-                if (fragment.isVisible() && fragment.isAdded() && (bundle != null)) {
+                Log.d(LOG_TAG, "showPane: fragment.isVisible() = " + fragment.isVisible());
+                Log.d(LOG_TAG, "showPane: fragment.isAdded() = " +fragment.isAdded());
+
+//                if (fragment.isVisible() && fragment.isAdded() && (bundle != null)) {
+                if (fragment.isAdded() && (bundle != null)) {
                     Log.d(LOG_TAG, "showPane: fragment_mediaplayer UPDATING...");
                     fragment.update(bundle);
                 }
@@ -401,10 +480,7 @@ public class MainActivity extends ActionBarActivity
     }
 
     private boolean isTablet() {
-        boolean isLarge = getResources().getBoolean(R.bool.isTablet);
-        Log.d(LOG_TAG, "isLarge: " +isLarge);
-
-        return isLarge;
+        return getResources().getBoolean(R.bool.isTablet);
     }
 
     private boolean isDualPane() {
@@ -422,6 +498,19 @@ public class MainActivity extends ActionBarActivity
         MediaPlayerFragment fragment = (MediaPlayerFragment)getFragmentManager().findFragmentByTag(MEDIAPLAYER_FRAGMENT);
         if (fragment == null) {
             fragment = new MediaPlayerFragment();
+        }
+
+        return fragment;
+    }
+
+    private MediaPlayerFragment getCurrentMediaPlayerFragment() {
+        MediaPlayerFragment fragment;
+
+        if (isDualPane()) {
+            fragment = (MediaPlayerFragment)getFragmentManager().findFragmentByTag(MEDIAPLAYER_FRAGMENT);
+        }
+        else {
+            fragment = (MediaPlayerFragment) getFragmentManager().findFragmentById(R.id.fragment_mediaplayer);
         }
 
         return fragment;
@@ -496,8 +585,9 @@ public class MainActivity extends ActionBarActivity
     private Intent createShareForecastIntent() {
         Intent shareIntent = null;
 
-        if (mMediaBundle != null) {
-            String playUrl = mMediaBundle.getString(MediaPlayerFragment.PREVIEW);
+        Bundle bundle = mServiceController.GetCurrentMediaBundle();
+        if (bundle != null) {
+            String playUrl = bundle.getString(MediaPlayerFragment.PREVIEW);
             shareIntent = new Intent(Intent.ACTION_SEND);
             shareIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
             shareIntent.setType("text/plain");
@@ -517,25 +607,18 @@ public class MainActivity extends ActionBarActivity
         mCountryCode = sharedPref.getString(getString(R.string.countrycode_preference), DEFAULT_COUNTRY_CODE);
 
         Log.d(LOG_TAG, "ReadPreferences countryCode = " + mCountryCode);
-        if (MediaService.mediaServiceMsgHandler != null) {
-            MediaService.mediaServiceMsgHandler.sendEmptyMessage(MediaService.MSG_READ_PREF);
+
+        if (mServiceController != null) {
+            mServiceController.ReadPreferences();    // tell service to read pref...
         }
     }
 
     private void SendTracks() {
         if (mCurrentTracks != null) {
             for (int i=0; i<mCurrentTracks.length; i++) {
-                SendTrackToService(mCurrentTracks[i]);
+                mServiceController.SendTrackToService(mCurrentTracks[i]);
             }
         }
     }
 
-    private void SendTrackToService(Bundle bundle) {
-        if (MediaService.mediaServiceMsgHandler != null) {
-            Message newMessage = new Message();
-            newMessage.what = MediaService.MSG_MEDIA_BUNDLE;
-            newMessage.setData(bundle);
-            MediaService.mediaServiceMsgHandler.sendMessage(newMessage);
-        }
-    }
 }
