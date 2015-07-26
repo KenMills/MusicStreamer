@@ -357,10 +357,15 @@ public class MainActivity extends ActionBarActivity
                 showView(R.id.fragment_topten);
             }
             else {
+                mServiceController.StopNotifications();
                 super.onBackPressed();
             }
         }
         else {
+            if (findViewById(R.id.fragment_artist).getVisibility() == View.VISIBLE) {
+                mServiceController.StopNotifications();
+            }
+
             super.onBackPressed();
         }
     }
